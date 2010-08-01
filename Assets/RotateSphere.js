@@ -19,6 +19,8 @@ var fileName : String = "name";
 // stores the highest frame the user has seen so far
 // I use this to know when to copy the previous frame to the current one
 static var maxIndex : int = 0;
+var currentID : int = 0;
+var currentName : String = "";
 static var frames : Array;
 static var frame;
 static var debugLabel : String;
@@ -75,7 +77,7 @@ function OnGUI () {
 	
 	if (fileName != "")
 	{
-		GUI.Box(guiBoxRect, "[Controls Rule] ver: 0.3a");
+		GUI.Box(guiBoxRect, "[Controls Rule] ver: 0.4a");
 		if (GUI.Button(Rect(Screen.width -200, 20, 100, 20), "Prev Frame ([)"))	{
 			NavigateFrame(true);
 		}
@@ -99,7 +101,7 @@ function OnGUI () {
 	GUI.Label (Rect(Screen.width - 200, 60, 100, 20), "File Name");
 	fileName = GUI.TextField (Rect (Screen.width - 100, 60, 100, 20), fileName);
 	
-	GUI.Label (Rect(Screen.width - 200, 100, 200, 160), fileList);
+	GUI.Label (Rect(Screen.width - 200, 100, 200, 800), fileList);
 
 	
 	if (checkPostForDone == true) 
@@ -340,6 +342,9 @@ function LoadPattern(theName : String)
 	if (thePattern == null)
 		return;
 	
+	currentID = int.Parse(thePattern[0]);
+	currentName = theName;
+	
 	// the patternlist will return an element that looks something like this
 	//
 	// 0.0.0|1.0.0|3.0.0
@@ -380,6 +385,7 @@ function LoadPattern(theName : String)
 	
 	// this is just some debugging code to made sure I'm decoding the 
 	// array correctly
+	/*
 	for (j = frameIndex;j < maxIndex;j++)
 	{
 	str = "";
@@ -387,7 +393,8 @@ function LoadPattern(theName : String)
 			str += frames[j][i] + ",";
 		Debug.Log(str);
 	}
-
+	*/
+	RenderFrame();
 }
 
 function FindInPattern(theName : String) : Array
@@ -398,7 +405,7 @@ function FindInPattern(theName : String) : Array
 		// Debug.Log("load pattern " + p[0] + " " + p[1] + " " + p[2]);
 		
 		if (p.Length < 3)
-			return;
+			break;
 		
 		if(p[1] == theName)
 			return p;
@@ -412,7 +419,21 @@ function PostPattern(theName : String, pattern : String)
 {
 	// Start a download of the given URL
 	Debug.Log(theName + ": " + pattern);
-	var pagesUrl : String = "http://akrasia.org/pyro/fileio.aspx?command=save&name=" + theName + "&pattern=" + pattern;
+	var pagesUrl : String = "http://akrasia.org/pyro/fileio.aspx?command=save&pattern=" + pattern;
+	
+	if (currentID == 0)
+	{
+		// do nothing
+	}
+	else if (theName == currentName)
+	{
+		pagesUrl += "&id=" + currentID;
+	}	else
+	{
+		theName += "1";
+		fileName = theName;
+	}
+	pagesUrl += "&name=" + theName;
     wwwPost = new WWW (pagesUrl);    
 	checkPostForDone = true;
 }
@@ -458,20 +479,17 @@ function Update () {
 	var objRequest : WebRequest ;
 	
 	if (Input.GetKeyDown(KeyCode.LeftBracket)) {
-		if (fileName[fileName.length-1] == "[")
-			fileName = fileName.Substring(0, fileName.length-1);
+		fileName = fileName.Trim("["[0]);
 		NavigateFrame(true);
 	}
 	
 	if (Input.GetKeyDown(KeyCode.RightBracket)) {
-		if (fileName[fileName.length-1] == "]")
-			fileName = fileName.Substring(0, fileName.length-1);
+		fileName = fileName.Trim("]"[0]);
 		NavigateFrame(false);
 	}
 	
 	if(Input.GetKeyDown(KeyCode.Period)) {
-		if (fileName[fileName.length-1] == ".")
-			fileName = fileName.Substring(0, fileName.length-1);
+		fileName = fileName.Trim("."[0]);
 		var sphere = GameObject.Find("Sphere");
 		sphere.renderer.enabled = ! sphere.renderer.enabled;
 	}
