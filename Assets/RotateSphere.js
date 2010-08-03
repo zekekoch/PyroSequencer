@@ -12,9 +12,10 @@ var checkListForDone : boolean = false;
 //var stream : SerialPort = new SerialPort("COM3", 9600); //Set the port (com4) and the baud rate (9600, is standard on most devices)
 var filePath = "testWrite.txt"; 
 
+static var INDEX_MAX : int = 400;
 static var frameIndex : int = 0;
 static var fileList : String = "";
-var fileName : String = "name";
+var fileName : String = "";
 
 // stores the highest frame the user has seen so far
 // I use this to know when to copy the previous frame to the current one
@@ -29,7 +30,7 @@ static var rowLabel = ["","","","","","","","", ""];
 var patternList : Array; 
 
 // initialization code goes outside of any functions
-frames = new Array(100);
+frames = new Array(INDEX_MAX);
 for(frame in frames)
 {
 	frame = new int[92];
@@ -77,7 +78,7 @@ function OnGUI () {
 	
 	if (fileName != "")
 	{
-		GUI.Box(guiBoxRect, "[Controls Rule] ver: 0.4a");
+		GUI.Box(guiBoxRect, "[Controls] ver: 0.5a");
 		if (GUI.Button(Rect(Screen.width -200, 20, 100, 20), "Prev Frame ([)"))	{
 			NavigateFrame(true);
 		}
@@ -90,9 +91,11 @@ function OnGUI () {
 		}
 		if (GUI.Button(Rect(Screen.width -200, 80, 100, 20), "Save")) {
 			PostPattern(fileName, "" + FramesToBitMask(frames));
+			GUIUtility.keyboardControl = 0;
 		}
 		if (GUI.Button(Rect(Screen.width -100, 80, 100, 20), "Load")) {
 			LoadPattern(fileName);
+			GUIUtility.keyboardControl = 0;
 		}
 	} else {
 		GUI.Box(guiBoxRect, "Enter Filename");	
