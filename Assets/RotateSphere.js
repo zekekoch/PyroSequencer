@@ -9,10 +9,12 @@ var checkPostForDone : boolean = false;
 var wwwList : WWW;
 var checkListForDone : boolean = false;
 
+var currentErrorString : String = "Welcome to the Sequencer";
+
 //var stream : SerialPort = new SerialPort("COM3", 9600); //Set the port (com4) and the baud rate (9600, is standard on most devices)
 var filePath = "testWrite.txt"; 
 
-static var INDEX_MAX : int = 400;
+static var INDEX_MAX : int = 500;
 static var frameIndex : int = 0;
 static var fileList : String = "";
 var fileName : String = "";
@@ -28,6 +30,7 @@ static var debugLabel : String;
 static var rowLabel = ["","","","","","","","", ""];
 
 var patternList : Array; 
+var copiedFrame : Array = null;
 
 // initialization code goes outside of any functions
 frames = new Array(INDEX_MAX);
@@ -65,13 +68,16 @@ function OnGUI () {
 	// someone who wanted could make this prettier
 	if (frames != null)
 	{
-		GUI.Label (Rect (10, 0, 400, 20), "frame: " + frameIndex);
+		GUI.Label (Rect (10, 0, 400, 20), "frame: " + (frameIndex  +1) + " of " + (maxIndex + 1));
 		for(i = 0;i<9;i++)
 		{
 			// Debug.Log("index=" + frameIndex + " " + i);
 			GUI.Label (Rect (10, 10*(i+1), 400, 20), "ring " + i + ":" + rowLabel[i]);
 		}
 	}	
+	
+	if (currentErrorString != "")
+		GUI.Label (Rect((Screen.width/2) - 120, 0, 240, 40), currentErrorString);
 	
 	var guiBoxRect : Rect = new Rect(Screen.width -200, 0, 200, 200);
 
@@ -97,6 +103,33 @@ function OnGUI () {
 			LoadPattern(fileName);
 			GUIUtility.keyboardControl = 0;
 		}
+		
+		if(GUI.Button(Rect(Screen.width -200, 100, 67, 20), "Clear"))
+		{
+			ClearFrame();
+			GUIUtility.keyboardControl = 0;
+		}
+		if(GUI.Button(Rect(Screen.width -134, 100, 67, 20), "Copy"))
+		{
+			CopyCurrentFrame();
+			GUIUtility.keyboardControl = 0;
+		}
+		
+		if (null != copiedFrame)
+		{
+			if(GUI.Button(Rect(Screen.width -67, 100, 67, 20), "Paste"))
+			{
+				PasteFrame();
+				GUIUtility.keyboardControl = 0;
+			}
+		}
+
+		/*
+		if (GUI.Button(Rect(Screen.width -100, 100, 100, 20), "Insert")) {
+			InsertPattern(fileName);
+			GUIUtility.keyboardControl = 0;
+		}
+		*/
 	} else {
 		GUI.Box(guiBoxRect, "Enter Filename");	
 	}
@@ -104,7 +137,7 @@ function OnGUI () {
 	GUI.Label (Rect(Screen.width - 200, 60, 100, 20), "File Name");
 	fileName = GUI.TextField (Rect (Screen.width - 100, 60, 100, 20), fileName);
 	
-	GUI.Label (Rect(Screen.width - 200, 100, 200, 800), fileList);
+	GUI.Label (Rect(Screen.width - 200, 120, 200, 800), fileList);
 
 	
 	if (checkPostForDone == true) 
@@ -335,31 +368,134 @@ function RenderFrame()
 	}
 }
 
+function ClearFrame()
+{
+	frames[frameIndex] = new int[92];
+	RenderFrame();
+}
+
+function CopyCurrentFrame()
+{
+	if (null == copiedFrame)
+		copiedFrame = new int[92];
+	
+	for(i = 0;i<frames[frameIndex].length;i++)			
+		copiedFrame[i] = frames[frameIndex][i];
+	RenderFrame();
+}
+
+function PasteFrame()
+{
+	
+	for(i = 0;i<frames[frameIndex].length;i++)			
+		frames[frameIndex][i] = copiedFrame[i];
+	RenderFrame();
+}
+
+function InsertPattern(theName : String)
+{
+	if (currentName == theName)
+	{
+		currentErrorString = "Hey! You can't insert a pattern into itself";
+		return;
+	}
+	
+	// look for the pattern by name in the list of all patterns
+	var thePattern = FindInPattern(theName);
+	if (thePattern == null)
+	{
+		currentErrorString = "Hmm... I couldn't find " + theName;
+		return;
+	}
+	
+	var tmpFrames : Array = LoadPatternIntoArray(theName);
+
+	if (maxIndex + tmpFrames.length > INDEX_MAX)
+	{
+		currentErrorString = "Sadly, I can't insert pattern " + theName + " because your total pattern length cannot be more than " +INDEX_MAX +".";
+		return;
+	}
+	
+	// first save the old frames
+	var tmpOldFrames : Array;
+	tmpOldFrames.length = maxIndex-frameIndex;
+	for(i = 0;i<=maxIndex - frameIndex;i++)
+		tmpOldFrames[i] = frames[frameIndex + i];
+	Debug.Log("Copied frames " + frameIndex + " to " + maxIndex);
+	
+	// copy the new frames in
+	for(i = 0;i<=maxIndex - frameIndex;i++)
+		frames[i+frameIndex] = tmpFrames[i];
+	
+	// insert the old frames at the end
+	for(i = frameIndex + tmpFrames.length;i < maxIndex + tmpFrames.length;i++)
+		frames[i] = tmpOldFrames[i - maxIndex];
+
+	// update the index length
+	maxIndex += tmpFrames.length;
+
+	// the number of filled frames is reset to the number 
+	// of frames in the new sequence
+	
+	// move to the next frame so they can tell something happened
+	frameIndex++;
+	RenderFrame();
+}
+
 function LoadPattern(theName : String)
 {
-	var tmpPattern : int[];
-
 	// look for the pattern by name
 	// in the list of all patterns
-	thePattern = FindInPattern(theName);
+	var thePattern = FindInPattern(theName);
 	if (thePattern == null)
-		return;
+	{
+		currentErrorString = "Couldn't find " + theName;
+		return null;
+	}
 	
 	currentID = int.Parse(thePattern[0]);
 	currentName = theName;
 	
+	var tmpFrames : Array = LoadPatternIntoArray(theName);
+			
+	frames = tmpFrames;
+
+	// the number of filled frames is reset to the number 
+	// of frames in the new sequence
+	maxIndex = tmpFrames.length;
+	
+	// fill out the rest of the array of frames
+	for(i = maxIndex;i<92;i++)
+	{
+		frames[i] = new int[92];
+	}
+	
+	frameIndex = 0;
+	RenderFrame();
+		
+}
+
+function LoadPatternIntoArray(theName : String) : Array
+{
+	var tmpPattern : int[];
+
+	// check to make sure the pattern exists
+	var thePattern = FindInPattern(theName);
+	if (thePattern == null)
+		return null;
+		
 	// the patternlist will return an element that looks something like this
 	//
 	// 0.0.0|1.0.0|3.0.0
 	//
 	// so first I split it on the pipe to get an array of frames
 	var tmpframes : Array = thePattern[2].Split("|"[0]);
+	Debug.Log("Loading Frames: " + tmpframes);
 	
 	var i : int;	
-	var iFrame : int = 0;
 	for (frame in tmpframes)
 	{
-		Debug.Log(frame);
+		Debug.Log("loading Frame: " + frame);
 		// a frame looks like 0.0.0 so I split on the period to get my three ints
 		var tmpframe = frame.Split("."[0]);
 				
@@ -370,34 +506,13 @@ function LoadPattern(theName : String)
 		for(i = 31;i<61;i++)
 			tmpPattern[i] = int.Parse(tmpframe[1]) & (1 << (i-31))? 1:0;
 		for(i = 61;i<91;i++)
-			tmpPattern[i] = int.Parse(tmpframe[2]) & (1 << (i-61))? 1:0;
-	
-		frames[iFrame] = tmpPattern;
-
-		iFrame++;
+			tmpPattern[i] = int.Parse(tmpframe[2]) & (1 << (i-61))? 1:0;			
+			
+		frame = tmpPattern;
 	}
 	
-	// reset the max index
-	frameIndex = 0;
-	maxIndex = iFrame;
-	
-	for(i = iFrame;i<92;i++)
-	{
-		frames[i] = new int[92];
-	}
-	
-	// this is just some debugging code to made sure I'm decoding the 
-	// array correctly
-	/*
-	for (j = frameIndex;j < maxIndex;j++)
-	{
-	str = "";
-		for (i =0;i<91;i++)
-			str += frames[j][i] + ",";
-		Debug.Log(str);
-	}
-	*/
-	RenderFrame();
+	Debug.Log("Loaded Frames: " + tmpframes);
+	return tmpframes;	
 }
 
 function FindInPattern(theName : String) : Array
@@ -510,27 +625,5 @@ function CopyFrame(sourceFrame : int[], destFrame : int[])
 	for(i = 0; i < sourceFrame.length;i++)
 		destFrame[i] = sourceFrame[i];
 }
-
-
-function WriteFile(filepathIncludingFileName : String) 
-{ 
-   var sw : StreamWriter = new StreamWriter(filepathIncludingFileName); 
-   sw.WriteLine("Line to write"); 
-   sw.WriteLine("Another Line"); 
-   sw.Flush(); 
-   sw.Close(); 
-} 
-
-function ReadFile(filepathIncludingFileName : String) { 
-   sr = new File.OpenText(filepathIncludingFileName); 
-
-   input = ""; 
-   while (true) { 
-      input = sr.ReadLine(); 
-      if (input == null) { break; } 
-      Debug.Log("line="+input); 
-   } 
-   sr.Close(); 
-} 
 
 
