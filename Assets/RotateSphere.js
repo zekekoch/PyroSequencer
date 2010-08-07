@@ -9,19 +9,35 @@ var checkPostForDone : boolean = false;
 var wwwList : WWW;
 var checkListForDone : boolean = false;
 
+var gridInt : int = 0; 
+var checkInt : int= 0; 
+
+static var inInsertMode : String = "Load";
+
+static var lastTick : float = Time.time; 
+static var lastKeyTick : float = Time.time;
+
 var currentErrorString : String = "Welcome to the Sequencer";
 
 //var stream : SerialPort = new SerialPort("COM3", 9600); //Set the port (com4) and the baud rate (9600, is standard on most devices)
-var filePath = "testWrite.txt"; 
 
-static var INDEX_MAX : int = 500;
-static var frameIndex : int = 0;
 static var fileList : String = "";
 var fileName : String = "";
+
+//this is the maximum number of frames allowed un a sequence
+static var INDEX_MAX : int = 1500;
+
+// this is the current frame
+static var frameIndex : int = 0;
+
+// this is the frame index before I hit play
+// if it's -1 then I'm not in the play state
+static var oldFrameIndex : int = -1;
 
 // stores the highest frame the user has seen so far
 // I use this to know when to copy the previous frame to the current one
 static var maxIndex : int = 0;
+
 var currentID : int = 0;
 var currentName : String = "";
 static var frames : Array;
@@ -30,7 +46,10 @@ static var debugLabel : String;
 static var rowLabel = ["","","","","","","","", ""];
 
 var patternList : Array; 
+var patternListNames : String[];
 var copiedFrame : Array = null;
+
+var uisvPosition : Vector2 = Vector2.zero;
 
 // initialization code goes outside of any functions
 frames = new Array(INDEX_MAX);
@@ -66,6 +85,7 @@ function OnGUI () {
 	// this is my poor mans 2d representation of the sphere
 	// if prints out which jets are on in rings
 	// someone who wanted could make this prettier
+	
 	if (frames != null)
 	{
 		GUI.Label (Rect (10, 0, 400, 20), "frame: " + (frameIndex  +1) + " of " + (maxIndex + 1));
@@ -78,67 +98,125 @@ function OnGUI () {
 	
 	if (currentErrorString != "")
 		GUI.Label (Rect((Screen.width/2) - 120, 0, 240, 40), currentErrorString);
-	
-	var guiBoxRect : Rect = new Rect(Screen.width -200, 0, 200, 200);
 
+	//framesInt = GUI.SelectionGrid(Rect(0, 0, 180, patternListNames.length*25), gridInt, patternListNames, 1);
+
+
+
+	var lastXPos : int = 0;
+	GUI.Box(Rect(Screen.width -200, lastXPos, 200, 200), "[Controls] ver: 0.7a");
+	lastXPos += 20;
+	if (GUI.RepeatButton(Rect(Screen.width -200, lastXPos, 100, 20), "Prev Frame ([)"))	{
+		NavigateFrame(true);
+	}
+	if (GUI.RepeatButton(Rect(Screen.width -100, lastXPos, 100, 20), "Next Frame (])")) {
+		NavigateFrame(false);
+	}
+	lastXPos += 20;
+	if (GUI.Button(Rect(Screen.width -200, lastXPos, 100, 20), "Hollow (.)"))	{
+		var sphere = GameObject.Find("Sphere");
+		sphere.renderer.enabled = ! sphere.renderer.enabled;
+	}
 	
-	if (fileName != "")
+		if (oldFrameIndex == -1)
 	{
-		GUI.Box(guiBoxRect, "[Controls] ver: 0.5a");
-		if (GUI.Button(Rect(Screen.width -200, 20, 100, 20), "Prev Frame ([)"))	{
-			NavigateFrame(true);
+		if (GUI.Button(Rect(Screen.width -100, lastXPos, 100, 20), "Play"))
+		{
+			oldFrameIndex = frameIndex;
+			GUIUtility.keyboardControl = 0;
 		}
-		if (GUI.Button(Rect(Screen.width -100, 20, 100, 20), "Next Frame (])")) {
-			NavigateFrame(false);
+	}
+	else
+	{
+		if (GUI.Button(Rect(Screen.width -100, lastXPos, 100, 20), "Stop"))
+		{
+			oldFrameIndex = -1;
+			GUIUtility.keyboardControl = 0;
 		}
-		if (GUI.Button(Rect(Screen.width -200, 40, 100, 20), "Hollow (.)"))	{
-			var sphere = GameObject.Find("Sphere");
-			sphere.renderer.enabled = ! sphere.renderer.enabled;
-		}
-		if (GUI.Button(Rect(Screen.width -200, 80, 100, 20), "Save")) {
+	}
+
+	lastXPos += 20;		
+	GUI.Label (Rect(Screen.width - 200, lastXPos , 60, 20), "File Name");
+	fileName = GUI.TextField (Rect (Screen.width - 140, lastXPos , 90, 20), fileName);
+
+	if ("" != fileName)
+	{
+		if (GUI.Button(Rect(Screen.width -50, lastXPos, 50, 20), "Save")) {
+			Debug.Log(frames.length);
 			PostPattern(fileName, "" + FramesToBitMask(frames));
 			GUIUtility.keyboardControl = 0;
 		}
-		if (GUI.Button(Rect(Screen.width -100, 80, 100, 20), "Load")) {
-			LoadPattern(fileName);
-			GUIUtility.keyboardControl = 0;
-		}
-		
-		if(GUI.Button(Rect(Screen.width -200, 100, 67, 20), "Clear"))
-		{
-			ClearFrame();
-			GUIUtility.keyboardControl = 0;
-		}
-		if(GUI.Button(Rect(Screen.width -134, 100, 67, 20), "Copy"))
-		{
-			CopyCurrentFrame();
-			GUIUtility.keyboardControl = 0;
-		}
-		
-		if (null != copiedFrame)
-		{
-			if(GUI.Button(Rect(Screen.width -67, 100, 67, 20), "Paste"))
-			{
-				PasteFrame();
-				GUIUtility.keyboardControl = 0;
-			}
-		}
+	}
 
-		/*
-		if (GUI.Button(Rect(Screen.width -100, 100, 100, 20), "Insert")) {
-			InsertPattern(fileName);
+
+	lastXPos += 20;	
+	if(GUI.Button(Rect(Screen.width -200, lastXPos, 30, 20), "Ins"))
+	{
+		InsertFrame();
+		GUIUtility.keyboardControl = 0;
+	}		
+	if(GUI.Button(Rect(Screen.width -170, lastXPos, 30, 20), "Clr"))
+	{
+		ClearFrame();
+		GUIUtility.keyboardControl = 0;
+	}
+	if(GUI.Button(Rect(Screen.width -140, lastXPos, 30, 20), "Cut"))
+	{
+		CutFrame();
+		GUIUtility.keyboardControl = 0;
+	}
+	if(GUI.Button(Rect(Screen.width -110, lastXPos, 40, 20), "Copy"))
+	{
+		CopyCurrentFrame();
+		GUIUtility.keyboardControl = 0;
+	}		
+	if (null != copiedFrame)
+	{
+		if(GUI.Button(Rect(Screen.width -70, lastXPos, 35, 20), "Pst"))
+		{
+			PasteFrame();
 			GUIUtility.keyboardControl = 0;
 		}
-		*/
-	} else {
-		GUI.Box(guiBoxRect, "Enter Filename");	
+		if(GUI.Button(Rect(Screen.width -35, lastXPos, 35, 20), "Mrg"))
+		{
+			MergeFrame();
+			GUIUtility.keyboardControl = 0;
+		}		
 	}
 	
-	GUI.Label (Rect(Screen.width - 200, 60, 100, 20), "File Name");
-	fileName = GUI.TextField (Rect (Screen.width - 100, 60, 100, 20), fileName);
-	
-	GUI.Label (Rect(Screen.width - 200, 120, 200, 800), fileList);
+	lastXPos += 20;
+	if (GUI.Button(Rect(Screen.width -150, lastXPos, 100, 20), inInsertMode)) 
+	{
+		Debug.Log("in insert mode [" + inInsertMode + "]"	);
+		switch (inInsertMode)
+		{
+			case "Insert":
+				Debug.Log("Insert");				
+				inInsertMode = "Merge All";
+				break;
+			case "Merge All":
+				Debug.Log("Merge");
+				inInsertMode = "Load";
+				break;
+			default:
+				Debug.Log("Load");
+				inInsertMode = "Insert";
+					break;
+		}	
+			
+		GUIUtility.keyboardControl = 0;
+	}
+	lastXPos += 20;
 
+    // An absolute-positioned example: We make a scrollview that has a really large client
+    // rect and put it in a small rect on the screen.
+    uisvPosition= GUI.BeginScrollView (Rect(Screen.width - 200, lastXPos , 200, Screen.height - 200), uisvPosition, Rect(0, 0, 180, patternListNames.length*25+10));
+
+	//GUI.Label(Rect(0,0,20,20), "hellow world");
+	gridInt = GUI.SelectionGrid(Rect(0, 0, 180, patternListNames.length*25), gridInt, patternListNames, 1);
+    
+    // End the scroll view that we began above.
+    GUI.EndScrollView ();
 	
 	if (checkPostForDone == true) 
 	{
@@ -159,7 +237,18 @@ function OnGUI () {
 			fileList = wwwList.data;
 			wwwList = null;
 			patternList = FileListToArray(fileList);
-
+			patternListNames = new String[patternList.length];
+			for (i = 0; i < patternList.length;i++)
+			{
+				if (patternList[i].length > 1)
+					patternListNames[i] = patternList[i][1];
+			}
+			
+			if (patternList[0][1] == fileName)
+			{
+				currentName = fileName;
+				currentID = int.Parse(patternList[0][0]);
+			}
 			// fileList is a variable that I'm using to show
 			// the sequenced that folks have created
 			var s : String = "";
@@ -187,6 +276,7 @@ function OnGUI () {
 //	 {id, name, #.#.#|#.#.#|#.#.#}, 
 //   {id, name, #.#.#|#.#.#|#.#.#}
 // }
+
 function FileListToArray(list : String) : Array
 {
 	if (!list)
@@ -324,6 +414,7 @@ function FramesToBitMask(frames) : String
 	
 	for (iFrame = 0;iFrame <= maxIndex;iFrame++)
 	{
+		Debug.Log(iFrame);
 		s += FrameToBitMask(frames[iFrame]);
 		if (iFrame < maxIndex)
 			s += "|";
@@ -368,6 +459,29 @@ function RenderFrame()
 	}
 }
 
+function CutFrame()
+{
+	CopyCurrentFrame();
+	var i : int;
+	for (i = frameIndex;i<maxIndex;i++)
+		frames[i] = frames[i+1];
+	frames[maxIndex] = new int[92];
+	maxIndex--;
+	frameIndex--;
+	RenderFrame();
+}
+
+function InsertFrame()
+{
+	var i : int;
+	for (i = maxIndex;i>=frameIndex;i--)
+		frames[i+1] = frames[i];
+	frames[frameIndex] = new int[92];
+	maxIndex++;
+	RenderFrame();
+
+}
+
 function ClearFrame()
 {
 	frames[frameIndex] = new int[92];
@@ -384,21 +498,29 @@ function CopyCurrentFrame()
 	RenderFrame();
 }
 
-function PasteFrame()
+function MergeFrame()
 {
 	
-	for(i = 0;i<frames[frameIndex].length;i++)			
-		frames[frameIndex][i] = copiedFrame[i];
+	for(i = 0;i<frames[frameIndex].length;i++)
+	{	
+		if (frames[frameIndex][i] == 1 || copiedFrame[i] == 1)
+			frames[frameIndex][i] = 1;
+	}
 	RenderFrame();
 }
 
-function InsertPattern(theName : String)
+function PasteFrame()
 {
-	if (currentName == theName)
-	{
-		currentErrorString = "Hey! You can't insert a pattern into itself";
-		return;
+	
+	for(i = 0;i<frames[frameIndex].length;i++)
+	{	
+		frames[frameIndex][i] = copiedFrame[i] ;
 	}
+	RenderFrame();
+}
+
+function InsertPattern(theName : String, merge : boolean)
+{
 	
 	// look for the pattern by name in the list of all patterns
 	var thePattern = FindInPattern(theName);
@@ -407,38 +529,70 @@ function InsertPattern(theName : String)
 		currentErrorString = "Hmm... I couldn't find " + theName;
 		return;
 	}
-	
-	var tmpFrames : Array = LoadPatternIntoArray(theName);
 
-	if (maxIndex + tmpFrames.length > INDEX_MAX)
+	// load my new pattern into tmpFrames
+	var tmpFrames : Array = LoadPatternIntoArray(theName);
+	var newMaxIndex : int;
+	if (merge == true)
+	{
+		if (tmpFrames.length > maxIndex)
+			newMaxIndex = tmpFrames.length;
+		else
+			newMaxIndex = maxIndex;
+	} 
+	else
+	{
+		newMaxIndex = maxIndex + tmpFrames.length;
+	}
+	
+	if (newMaxIndex > INDEX_MAX)
 	{
 		currentErrorString = "Sadly, I can't insert pattern " + theName + " because your total pattern length cannot be more than " +INDEX_MAX +".";
 		return;
 	}
-	
-	// first save the old frames
-	var tmpOldFrames : Array;
+
+	var tmpOldFrames : Array = new Array();
 	tmpOldFrames.length = maxIndex-frameIndex;
-	for(i = 0;i<=maxIndex - frameIndex;i++)
+
+	if (merge == true)
+	{
+		if (tmpFrames.length > frames.length)
+			frames.length = tmpFrames.length;
+	}
+	else
+	{
+		frames.length += tmpFrames.length;		
+	}
+
+	for(i = 0;i<maxIndex - frameIndex;i++)
+	{
 		tmpOldFrames[i] = frames[frameIndex + i];
+	}
 	Debug.Log("Copied frames " + frameIndex + " to " + maxIndex);
 	
 	// copy the new frames in
-	for(i = 0;i<=maxIndex - frameIndex;i++)
-		frames[i+frameIndex] = tmpFrames[i];
-	
-	// insert the old frames at the end
-	for(i = frameIndex + tmpFrames.length;i < maxIndex + tmpFrames.length;i++)
-		frames[i] = tmpOldFrames[i - maxIndex];
+	for(i = 0;i < tmpFrames.length;i++)
+	{
+		if (merge == true)
+		{
+			Debug.Log("In Merge");
+			for(jetIndex = 0;jetIndex < 92;jetIndex++)
+			{
+				// Debug.Log("In Merge " + frames[i+frameIndex][jetIndex]  + ":" + tmpFrames[i][jetIndex]);
+				frames[i+frameIndex][jetIndex]  = (frames[i+frameIndex][jetIndex] || tmpFrames[i][jetIndex]);
+			}	
+			maxIndex = newMaxIndex;
+		}
+		else
+		{
+			Debug.Log("In Insert");
+			frames[i+frameIndex] = tmpFrames[i];
+			maxIndex += tmpFrames.length + 1;
+			for(j = 0;j < tmpOldFrames.length;j++)
+				frames[i+tmpFrames.length + frameIndex+1][j] = tmpOldFrames[i][j];
+		}
+	}
 
-	// update the index length
-	maxIndex += tmpFrames.length;
-
-	// the number of filled frames is reset to the number 
-	// of frames in the new sequence
-	
-	// move to the next frame so they can tell something happened
-	frameIndex++;
 	RenderFrame();
 }
 
@@ -471,6 +625,7 @@ function LoadPattern(theName : String)
 	}
 	
 	frameIndex = 0;
+	fileName = theName;	
 	RenderFrame();
 		
 }
@@ -551,7 +706,14 @@ function PostPattern(theName : String, pattern : String)
 		theName += "1";
 		fileName = theName;
 	}
+	
+	currentName = theName;
 	pagesUrl += "&name=" + theName;
+	
+	    // Create a Web Form
+    //var form = new WWWForm();
+    //form.AddField("pattern", pattern);
+	
     wwwPost = new WWW (pagesUrl);    
 	checkPostForDone = true;
 }
@@ -571,6 +733,10 @@ function NavigateFrame (direction : boolean) {
 		{
 			frameIndex--;
 			sDir = "<- ";
+		}
+		else
+		{
+			frameIndex = maxIndex;
 		}
 	}
 	else 
@@ -596,14 +762,61 @@ function Update () {
 	var objResponse : WebResponse;
 	var objRequest : WebRequest ;
 	
-	if (Input.GetKeyDown(KeyCode.LeftBracket)) {
-		fileName = fileName.Trim("["[0]);
-		NavigateFrame(true);
+	
+	// if the oldFrameIndex isn't -1 then I'm in the play state
+	// and so I'm going to loop through the animations
+	if (oldFrameIndex != -1)
+	{		
+		if (Time.time > (lastTick + .2))
+		{
+			lastTick = Time.time;
+			frameIndex++;
+			if (frameIndex > maxIndex)
+				frameIndex = 0;
+				
+			RenderFrame();			
+		}
+	}
+		
+
+   if (gridInt != checkInt) 
+   {
+		if ("Insert" == inInsertMode)
+		{
+			Debug.Log("Insert: " + gridInt + ":"+ patternListNames[gridInt]); 
+			InsertPattern(patternListNames[gridInt], false);		
+		}
+		else if ("Load" == inInsertMode)
+		{
+			Debug.Log("Load" + gridInt + ":"+ patternListNames[gridInt]); 
+
+			LoadPattern(patternListNames[gridInt]);
+		}
+		else if ("Merge All" == inInsertMode)
+		{
+			Debug.Log("Merge: " + gridInt + ":"+ patternListNames[gridInt]); 
+			InsertPattern(patternListNames[gridInt], true);		
+		}
+		
+		checkInt = gridInt; 
+   } 
+
+	if (Input.GetKey(KeyCode.LeftBracket)) {
+		if(Time.time > (lastKeyTick + .2))
+		{
+			lastKeyTick = Time.time;
+			fileName = fileName.Trim("["[0]);
+			NavigateFrame(true);
+		}
 	}
 	
-	if (Input.GetKeyDown(KeyCode.RightBracket)) {
-		fileName = fileName.Trim("]"[0]);
-		NavigateFrame(false);
+	if (Input.GetKey(KeyCode.RightBracket)) {
+		if(Time.time > (lastKeyTick + .2))
+		{
+			lastKeyTick = Time.time;
+			fileName = fileName.Trim("]"[0]);
+			NavigateFrame(false);
+		}
 	}
 	
 	if(Input.GetKeyDown(KeyCode.Period)) {
@@ -615,7 +828,7 @@ function Update () {
 
     // spin the object around the world origin at 20 degrees/second.
 	//transform.Rotate (Input.GetAxis("Vertical"), Input.GetAxis("Horizontal") , 0, Space.Self);
-	transform.RotateAround(Vector3(-85.19227,11.19896,7.82373), Vector3.forward, 1* Input.GetAxis("Vertical"));
+	transform.RotateAround(Vector3(-85.19227,11.19896,7.82373), Vector3.up + Vector3.forward, 1* Input.GetAxis("Vertical"));
 	transform.RotateAround(Vector3(-85.19227,11.19896,7.82373), Vector3.right, 1* Input.GetAxis("Horizontal"));
 }
 
